@@ -17,8 +17,9 @@ export const CreatureState = {
  * Creature class - builds and manages a creature from DNA
  */
 export class Creature {
-    constructor(dna, world, startX, startY, id) {
+    constructor(dna, world, startX, startY, id, name = null) {
         this.id = id;
+        this.name = name || `Wezen #${id}`; // Use provided name or fallback
         this.dna = dna;
         this.world = world;
 

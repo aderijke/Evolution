@@ -10,8 +10,9 @@ import { WebGLRenderer as Renderer } from './webgl-renderer.js';
 import { UIManager } from './ui.js';
 import { Creature } from './creature.js';
 import { mutateDNA, crossoverDNA } from './dna.js';
-import { exportDNA, saveToHallOfFame } from './storage.js';
+import { exportDNA, saveToHallOfFame, saveToLongestLiving, getLongestLiving } from './storage.js';
 import { PowerUp } from './powerup.js';
+import { generateName } from './name-generator.js';
 
 // Configuration
 const CONFIG = {
@@ -231,6 +232,7 @@ class Simulation {
         });
         this.ui.on('onExport', () => this.exportBestDNA());
         this.ui.on('onImport', (dna) => this.importDNA(dna));
+        this.ui.on('onHallOfFameBattle', () => this.startHallOfFameBattle());
     }
 
     /**
@@ -239,6 +241,87 @@ class Simulation {
     setupVisibilityHandling() {
         // Simulation continues in background - no pause on tab hide
         // DeltaTime capping prevents issues with large time steps
+    }
+
+    /**
+     * Check if a dead creature should be added to longest living hall of fame
+     * @param {Creature} creature - The creature that just died
+     */
+    checkLongestLiving(creature) {
+        if (!creature || creature.isAlive()) return;
+        
+        const longestLiving = getLongestLiving();
+        const minAge = longestLiving.length < 10 ? 0 : Math.min(...longestLiving.map(e => e.age));
+        
+        // Add if top 10 or age is higher than current minimum
+        if (longestLiving.length < 10 || creature.age > minAge) {
+            saveToLongestLiving(creature.dna, creature.age, creature.id, creature.name);
+        }
+    }
+
+    /**
+     * Start a special battle with the top 10 longest living creatures
+     */
+    startHallOfFameBattle() {
+        const longestLiving = getLongestLiving();
+        
+        if (longestLiving.length === 0) {
+            alert('Er zijn nog geen wezens in de Hall of Fame! Laat eerst wat wezens sterven om een top 10 te verzamelen.');
+            return;
+        }
+
+        // Pause current simulation
+        this.pause();
+
+        // Clear current generation
+        this.physics.clearCreatures();
+        this.creatures = [];
+
+        // Clear and reset power-ups
+        for (const p of this.powerUps) p.destroy();
+        this.powerUps = [];
+        this.spawnInitialPowerUps();
+
+        // Regenerate obstacles
+        this.physics.createObstacles(5 + Math.floor(Math.random() * 5));
+
+        // Spawn top 10 longest living creatures
+        const rect = this.canvas.getBoundingClientRect();
+        const displayWidth = rect.width;
+        const displayHeight = rect.height;
+        const margin = 150;
+        const areaWidth = displayWidth - margin * 2;
+        const areaHeight = displayHeight - margin * 2;
+
+        for (let i = 0; i < longestLiving.length; i++) {
+            const entry = longestLiving[i];
+            const dna = entry.dna;
+
+            // Random spawn position within arena
+            const x = margin + Math.random() * areaWidth;
+            const y = margin + Math.random() * areaHeight;
+
+            const creature = new Creature(
+                dna,
+                this.physics.getWorld(),
+                x, y,
+                this.nextCreatureId++,
+                entry.name || generateName() // Use saved name or generate new
+            );
+
+            this.physics.registerCreature(creature);
+            this.creatures.push(creature);
+            
+            // Log birth event
+            const ageFormatted = this.ui.formatTime(entry.age);
+            this.ui.addLogEntry(`${creature.name} (#${creature.id}) is gespawnd (leeftijd: ${ageFormatted})`, 'birth');
+        }
+
+        // Update UI
+        this.updateUI();
+        
+        // Show message
+        this.ui.addLogEntry(`Hall of Fame Battle gestart met ${longestLiving.length} langst levende wezens!`, 'info');
     }
 
     /**
@@ -284,14 +367,15 @@ class Simulation {
                 dna,
                 this.physics.getWorld(),
                 x, y,
-                this.nextCreatureId++
+                this.nextCreatureId++,
+                generateName()
             );
 
             this.physics.registerCreature(creature);
             this.creatures.push(creature);
             
             // Log birth event
-            this.ui.addLogEntry(`Wezen #${creature.id} is geboren`, 'birth');
+            this.ui.addLogEntry(`${creature.name} (#${creature.id}) is geboren`, 'birth');
         }
 
         // Update UI
@@ -340,14 +424,15 @@ class Simulation {
                 dna,
                 this.physics.getWorld(),
                 x, y,
-                this.nextCreatureId++
+                this.nextCreatureId++,
+                generateName()
             );
 
             this.physics.registerCreature(creature);
             this.creatures.push(creature);
             
             // Log birth event
-            this.ui.addLogEntry(`Wezen #${creature.id} is geboren`, 'birth');
+            this.ui.addLogEntry(`${creature.name} (#${creature.id}) is geboren`, 'birth');
         }
 
         // Update UI
@@ -624,11 +709,18 @@ class Simulation {
     setupEventLogging() {
         // These will be called from creature.js
         this.onCreatureDeath = (creature, killer, cause) => {
-            const creatureName = `Wezen #${creature.id}`;
+            const creatureName = creature.name || `Wezen #${creature.id}`;
+            
+            // Check if this creature should be added to longest living hall of fame
+            this.checkLongestLiving(creature);
+            
+            // Update top 10 list if a creature was added
+            this.ui.updateTop10List();
+            
             if (cause === 'starvation') {
                 this.ui.addLogEntry(`${creatureName} is verhongerd`, 'starvation');
             } else if (killer) {
-                const killerName = `Wezen #${killer.id}`;
+                const killerName = killer.name || `Wezen #${killer.id}`;
                 this.ui.addLogEntry(`${killerName} heeft ${creatureName} vermoord`, 'kill');
             } else {
                 this.ui.addLogEntry(`${creatureName} is overleden`, 'death');
@@ -636,8 +728,8 @@ class Simulation {
         };
 
         this.onDamageDealt = (attacker, victim, amount) => {
-            const attackerName = `Wezen #${attacker.id}`;
-            const victimName = `Wezen #${victim.id}`;
+            const attackerName = attacker.name || `Wezen #${attacker.id}`;
+            const victimName = victim.name || `Wezen #${victim.id}`;
             this.ui.addLogEntry(`${attackerName} heeft ${amount.toFixed(1)} schade toegebracht aan ${victimName}`, 'damage');
         };
     }
@@ -738,14 +830,15 @@ class Simulation {
             this.physics.getWorld(),
             clampedX,
             clampedY,
-            this.nextCreatureId++
+            this.nextCreatureId++,
+            generateName()
         );
 
         this.physics.registerCreature(child);
         this.creatures.push(child);
 
         // Log birth event
-        this.ui.addLogEntry(`Wezen #${child.id} is geboren (ouders: #${parent1.id} & #${parent2.id})`, 'birth');
+        this.ui.addLogEntry(`${child.name} (#${child.id}) is geboren (ouders: ${parent1.name} & ${parent2.name})`, 'birth');
     }
 
     /**

@@ -14,6 +14,7 @@ export class UIManager {
         this.bestFitnessEl = document.getElementById('best-fitness');
         this.avgFitnessEl = document.getElementById('avg-fitness');
         this.oldestCreatureEl = document.getElementById('oldest-creature');
+        this.top10ListEl = document.getElementById('top-10-list');
 
         // Control elements
         this.btnStart = document.getElementById('btn-start');
@@ -21,6 +22,7 @@ export class UIManager {
         this.btnReset = document.getElementById('btn-reset');
         this.btnExport = document.getElementById('btn-export');
         this.btnImportTrigger = document.getElementById('btn-import-trigger');
+        this.btnHallOfFame = document.getElementById('btn-hall-of-fame');
         this.fileInput = document.getElementById('dna-import');
         this.speedSlider = document.getElementById('speed-slider');
         this.speedValue = document.getElementById('speed-value');
@@ -29,6 +31,7 @@ export class UIManager {
 
         // Info panel elements
         this.infoPanel = document.getElementById('info-panel');
+        this.infoPanelTitle = document.getElementById('info-panel-title');
         this.infoFoodBar = document.getElementById('info-food-bar');
         this.infoHealthBar = document.getElementById('info-health-bar');
         this.infoAge = document.getElementById('info-age');
@@ -96,6 +99,12 @@ export class UIManager {
         this.btnImportTrigger.addEventListener('click', () => {
             this.fileInput.click();
         });
+
+        if (this.btnHallOfFame) {
+            this.btnHallOfFame.addEventListener('click', () => {
+                this.callbacks.onHallOfFameBattle?.();
+            });
+        }
 
         this.fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
@@ -226,6 +235,9 @@ export class UIManager {
             }
         }
 
+        // Update top 10 list
+        this.updateTop10List();
+
         // Update selected creature info
         if (this.selectedCreature) {
             if (!this.selectedCreature.isAlive()) {
@@ -290,8 +302,16 @@ export class UIManager {
         this.selectedCreature = creature;
         if (creature) {
             this.infoPanel.style.display = 'block';
+            // Update title with creature name
+            if (this.infoPanelTitle) {
+                this.infoPanelTitle.textContent = creature.name || `Wezen #${creature.id}`;
+            }
         } else {
             this.infoPanel.style.display = 'none';
+            // Reset title when no creature is selected
+            if (this.infoPanelTitle) {
+                this.infoPanelTitle.textContent = 'Wezen Details';
+            }
         }
     }
 
@@ -412,6 +432,45 @@ export class UIManager {
 
         // Show max 3 most significant units
         return parts.slice(0, 3).join(' ');
+    }
+
+    /**
+     * Update the top 10 longest living creatures list
+     */
+    updateTop10List() {
+        if (!this.top10ListEl) return;
+
+        // Import getLongestLiving dynamically to avoid circular dependencies
+        import('./storage.js').then(({ getLongestLiving }) => {
+            const longestLiving = getLongestLiving();
+
+            if (longestLiving.length === 0) {
+                this.top10ListEl.innerHTML = '<div class="top-10-empty">Nog geen wezens in de Hall of Fame</div>';
+                return;
+            }
+
+            // Clear and rebuild list
+            this.top10ListEl.innerHTML = '';
+
+            longestLiving.forEach((entry, index) => {
+                const rank = index + 1;
+                const creatureName = entry.name || (entry.creatureId !== undefined ? `Wezen #${entry.creatureId}` : 'Onbekend');
+                const ageFormatted = this.formatTime(entry.age);
+
+                const item = document.createElement('div');
+                item.className = 'top-10-item';
+                item.innerHTML = `
+                    <div class="top-10-rank">${rank}.</div>
+                    <div class="top-10-details">
+                        <div class="top-10-name">${creatureName}</div>
+                        <div class="top-10-age">${ageFormatted}</div>
+                    </div>
+                `;
+                this.top10ListEl.appendChild(item);
+            });
+        }).catch(err => {
+            console.error('Error loading top 10 list:', err);
+        });
     }
 }
 

@@ -183,6 +183,25 @@ export class WebGLRenderer {
                 container.addChild(graphics);
             }
 
+            // Name label
+            const nameLabel = new PIXI.Text('', {
+                fontFamily: 'Arial',
+                fontSize: 12,
+                fill: 0xFFFFFF,
+                align: 'center',
+                stroke: 0x000000,
+                strokeThickness: 3,
+                dropShadow: true,
+                dropShadowColor: 0x000000,
+                dropShadowBlur: 4,
+                dropShadowAngle: Math.PI / 6,
+                dropShadowDistance: 2
+            });
+            nameLabel.name = 'nameLabel';
+            nameLabel.anchor.set(0.5, 0.5);
+            nameLabel.zIndex = 1000; // Make sure it's on top
+            container.addChild(nameLabel);
+
             // Food bar container
             const foodBar = new PIXI.Graphics();
             foodBar.name = 'foodBar';
@@ -258,6 +277,23 @@ export class WebGLRenderer {
                 graphics.x = body.position.x;
                 graphics.y = body.position.y;
                 graphics.rotation = body.angle;
+            }
+        }
+
+        // Update name label - always show for alive creatures
+        const nameLabel = container.getChildByName('nameLabel');
+        if (nameLabel) {
+            if (creature.isAlive()) {
+                const pos = creature.getCenterPosition();
+                nameLabel.text = creature.name || `Wezen #${creature.id}`;
+                // Position absolutely like other graphics (container is at 0,0)
+                nameLabel.x = pos.x;
+                nameLabel.y = pos.y - 40;
+                nameLabel.visible = true;
+                nameLabel.alpha = 1.0;
+            } else {
+                // Hide name when creature is dead
+                nameLabel.visible = false;
             }
         }
 

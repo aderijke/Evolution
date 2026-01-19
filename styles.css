@@ -137,6 +137,60 @@ body {
     max-width: 200px;
 }
 
+/* ===== Top 10 List ===== */
+.top-10-list {
+    max-height: 400px;
+    overflow-y: auto;
+    margin-top: 12px;
+}
+
+.top-10-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+    padding: 20px;
+    font-style: italic;
+}
+
+.top-10-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.top-10-item:last-child {
+    border-bottom: none;
+}
+
+.top-10-rank {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    min-width: 24px;
+    font-variant-numeric: tabular-nums;
+}
+
+.top-10-details {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.top-10-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.top-10-age {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
 /* ===== Controls Panel ===== */
 .controls-panel {
     background: var(--bg-secondary);

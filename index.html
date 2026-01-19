@@ -40,6 +40,13 @@
                     </div>
                 </div>
 
+                <div class="stats-panel">
+                    <h2>Top 10 Langst Levend</h2>
+                    <div id="top-10-list" class="top-10-list">
+                        <div class="top-10-empty">Nog geen wezens in de Hall of Fame</div>
+                    </div>
+                </div>
+
                 <div class="controls-panel">
                     <button id="btn-start" class="control-btn primary">Start</button>
                     <button id="btn-pause" class="control-btn" disabled>Pauze</button>
@@ -49,6 +56,9 @@
                     <button id="btn-export" title="Exporteer beste DNA">Exporteer Beste</button>
                     <button id="btn-import-trigger" title="Importeer DNA uit bestand">Importeer DNA</button>
                     <input type="file" id="dna-import" style="display: none;" accept=".json">
+                </div>
+                <div class="control-group">
+                    <button id="btn-hall-of-fame" title="Start battle met top 10 langst levende wezens">Hall of Fame Battle</button>
                 </div>
                 <div class="slider-group">
                     <label for="speed-slider">Snelheid: <span id="speed-value">1x</span></label>
@@ -62,7 +72,7 @@
 
                 <div id="info-panel" class="info-panel" style="display: none;">
                     <div class="panel-header">
-                        <h3>Wezen Details</h3>
+                        <h3 id="info-panel-title">Wezen Details</h3>
                         <button id="btn-close-info">×</button>
                     </div>
                     <div class="info-content">
