@@ -477,6 +477,16 @@ input[type="range"]::-webkit-slider-thumb:hover {
     color: #94a3b8;
 }
 
+/* Geboorte - Groen */
+.log-entry.log-birth {
+    border-left: 4px solid #10b981;
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.log-entry.log-birth .log-message {
+    color: #34d399;
+}
+
 #btn-clear-log {
     background: transparent;
     border: 1px solid var(--border-color);

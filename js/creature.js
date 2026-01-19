@@ -30,6 +30,7 @@ export class Creature {
         this.fadeAlpha = 1.0;
         this.canDestroy = false;
         this.deathTime = 0;
+        this.lastReproductionTime = 0; // Track when creature last reproduced
 
         // Fitness tracking
         this.startPosition = { x: startX, y: startY };
@@ -495,6 +496,9 @@ export class Creature {
 
         if (killer) {
             killer.kills++;
+            // Restore killer to full health and food
+            killer.health = 200; // Max health
+            killer.food = 200; // Max food
         }
 
         // Visual feedback - gray out and prepare to fade

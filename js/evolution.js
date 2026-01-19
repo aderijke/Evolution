@@ -52,6 +52,17 @@ export class EvolutionManager {
             const dna = this.population.find(d => d === creature.dna);
             if (dna) {
                 dna.fitness = creature.calculateFitness();
+                // Store age directly in DNA for all living creatures
+                // This will be preserved for elite creatures in next generation
+                if (creature.isAlive()) {
+                    dna.creatureAge = creature.age;
+                } else {
+                    // Clear age for dead creatures
+                    delete dna.creatureAge;
+                }
+            } else {
+                // Debug: DNA not found - this shouldn't happen
+                console.warn('DNA not found for creature', creature.id);
             }
         }
 
@@ -70,18 +81,29 @@ export class EvolutionManager {
 
     /**
      * Evolve to next generation
+     * @param {Creature[]} creatures - Current generation creatures (for age lookup)
+     * @param {Creature[]} eliteCreatures - Elite creatures that will survive (their DNA will be updated)
      */
-    evolveNextGeneration() {
+    evolveNextGeneration(creatures = [], eliteCreatures = []) {
         // Sort by fitness (descending)
         const sorted = [...this.population].sort((a, b) => (b.fitness || 0) - (a.fitness || 0));
 
         const newPopulation = [];
 
         // Elitism: keep top performers unchanged
+        // Update their DNA objects in place (they're already on screen)
         for (let i = 0; i < this.eliteCount && i < sorted.length; i++) {
-            const elite = cloneDNA(sorted[i]);
+            const eliteDNA = sorted[i];
+            const elite = cloneDNA(eliteDNA);
             elite.generation = this.generation + 1;
             elite.fitness = 0;
+            
+            // No need to preserve age - elite creatures keep their age automatically
+            // They stay on screen and continue aging
+            
+            // Clean up temporary properties
+            delete elite.creatureAge;
+            delete elite.savedAge;
             newPopulation.push(elite);
         }
 

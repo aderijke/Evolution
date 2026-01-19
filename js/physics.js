@@ -143,13 +143,32 @@ export class PhysicsManager {
         const impactSpeed = Vector.magnitude(relativeVelocity);
 
         if (impactSpeed > DAMAGE_THRESHOLD) {
-            const damage = (impactSpeed - DAMAGE_THRESHOLD) *
+            const baseDamage = (impactSpeed - DAMAGE_THRESHOLD) *
                 (bodyA.mass + bodyB.mass) *
                 DAMAGE_MULTIPLIER;
 
-            // Both creatures take damage proportional to impact
-            creatureA.takeDamage(damage * 0.5, creatureB);
-            creatureB.takeDamage(damage * 0.5, creatureA);
+            // Age-based combat system
+            // Linear scaling from age 0 to maxAge
+            const MAX_AGE = 14400; // Maximum age for full bonus (4 hours = 14400 seconds)
+            const MAX_ATTACK_BONUS = 2.0; // Maximum attack multiplier (2x damage at max age)
+            const MAX_DEFENSE_REDUCTION = 0.5; // Maximum defense reduction (50% less damage at max age)
+            
+            // Calculate attack bonus: linear from 1.0 to MAX_ATTACK_BONUS
+            const attackBonusA = 1.0 + (Math.min(creatureA.age, MAX_AGE) / MAX_AGE) * (MAX_ATTACK_BONUS - 1.0);
+            const attackBonusB = 1.0 + (Math.min(creatureB.age, MAX_AGE) / MAX_AGE) * (MAX_ATTACK_BONUS - 1.0);
+            
+            // Calculate defense reduction: linear from 1.0 to (1.0 - MAX_DEFENSE_REDUCTION)
+            const defenseA = 1.0 - (Math.min(creatureA.age, MAX_AGE) / MAX_AGE) * MAX_DEFENSE_REDUCTION;
+            const defenseB = 1.0 - (Math.min(creatureB.age, MAX_AGE) / MAX_AGE) * MAX_DEFENSE_REDUCTION;
+            
+            // Calculate final damage:
+            // - Attacker's age increases damage dealt
+            // - Defender's age reduces damage taken
+            const damageToA = baseDamage * 0.5 * attackBonusB * defenseA;
+            const damageToB = baseDamage * 0.5 * attackBonusA * defenseB;
+            
+            creatureA.takeDamage(damageToA, creatureB);
+            creatureB.takeDamage(damageToB, creatureA);
         }
     }
 
@@ -196,6 +215,10 @@ export class PhysicsManager {
      * @param {number} deltaTime - Time step in milliseconds
      */
     update(deltaTime) {
+        // Cap delta time to prevent issues
+        const maxDeltaTime = 50; // Max 50ms per step
+        const safeDeltaTime = Math.min(deltaTime, maxDeltaTime);
+
         // Clean up any invalid creatures before update
         const invalidCreatures = [];
         for (const creature of this.creatures.values()) {
@@ -209,34 +232,79 @@ export class PhysicsManager {
             }
         }
 
-        // Clean up any invalid constraints in the world before update
+        // Aggressively clean up any invalid constraints in the world before update
+        // This is critical to prevent Matter.js from accessing invalid body references
         if (this.world && this.world.constraints) {
-            const validConstraints = this.world.constraints.filter(c => {
-                if (!c || !c.id) return false;
-                if (!c.bodyA || !c.bodyB) return false;
-                if (!c.bodyA.id || !c.bodyB.id) return false;
-                // Check if bodies are still in world
-                const bodyAInWorld = this.world.bodies && this.world.bodies.some(b => b && b.id === c.bodyA.id);
-                const bodyBInWorld = this.world.bodies && this.world.bodies.some(b => b && b.id === c.bodyB.id);
-                return bodyAInWorld && bodyBInWorld;
-            });
+            const constraintsToRemove = [];
+            
+            // Create a set of valid body IDs for fast lookup
+            const validBodyIds = new Set();
+            if (this.world.bodies) {
+                for (const body of this.world.bodies) {
+                    if (body && body.id) {
+                        validBodyIds.add(body.id);
+                    }
+                }
+            }
+            
+            // Check all constraints for validity
+            for (let i = this.world.constraints.length - 1; i >= 0; i--) {
+                const constraint = this.world.constraints[i];
+                
+                // Basic validation
+                if (!constraint || !constraint.id) {
+                    constraintsToRemove.push(constraint);
+                    continue;
+                }
+                
+                // Check body references exist
+                if (!constraint.bodyA || !constraint.bodyB) {
+                    constraintsToRemove.push(constraint);
+                    continue;
+                }
+                
+                // Check body IDs exist
+                if (!constraint.bodyA.id || !constraint.bodyB.id) {
+                    constraintsToRemove.push(constraint);
+                    continue;
+                }
+                
+                // Check bodies are still in world (using our set for fast lookup)
+                if (!validBodyIds.has(constraint.bodyA.id) || !validBodyIds.has(constraint.bodyB.id)) {
+                    constraintsToRemove.push(constraint);
+                    continue;
+                }
+                
+                // Additional safety: check if bodies have valid index (Matter.js internal)
+                try {
+                    if (constraint.bodyA.index === undefined || constraint.bodyB.index === undefined) {
+                        constraintsToRemove.push(constraint);
+                        continue;
+                    }
+                } catch (e) {
+                    // If we can't access index, the body is likely invalid
+                    constraintsToRemove.push(constraint);
+                    continue;
+                }
+            }
             
             // Remove invalid constraints
-            for (const constraint of this.world.constraints) {
-                if (!validConstraints.includes(constraint)) {
-                    try {
-                        World.remove(this.world, constraint);
-                    } catch (e) {
-                        // Ignore errors
-                    }
+            for (const constraint of constraintsToRemove) {
+                try {
+                    World.remove(this.world, constraint);
+                } catch (e) {
+                    // Ignore errors during cleanup
                 }
             }
         }
 
         try {
-            Engine.update(this.engine, deltaTime);
+            Engine.update(this.engine, safeDeltaTime);
         } catch (error) {
-            console.error('Physics engine update error:', error);
+            // Silently handle errors when tab is hidden (common issue)
+            if (!document.hidden) {
+                console.error('Physics engine update error:', error);
+            }
             // Try to recover by cleaning up potentially corrupted state
             this.recoverFromError();
             return;

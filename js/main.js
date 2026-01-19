@@ -9,7 +9,7 @@ import { EvolutionManager } from './evolution.js';
 import { WebGLRenderer as Renderer } from './webgl-renderer.js';
 import { UIManager } from './ui.js';
 import { Creature } from './creature.js';
-import { mutateDNA } from './dna.js';
+import { mutateDNA, crossoverDNA } from './dna.js';
 import { exportDNA, saveToHallOfFame } from './storage.js';
 import { PowerUp } from './powerup.js';
 
@@ -234,7 +234,15 @@ class Simulation {
     }
 
     /**
-     * Initialize a new generation
+     * Set up page visibility handling (simulation continues in background)
+     */
+    setupVisibilityHandling() {
+        // Simulation continues in background - no pause on tab hide
+        // DeltaTime capping prevents issues with large time steps
+    }
+
+    /**
+     * Initialize a new generation (first generation only)
      */
     initGeneration() {
         // Clear previous generation
@@ -281,6 +289,65 @@ class Simulation {
 
             this.physics.registerCreature(creature);
             this.creatures.push(creature);
+            
+            // Log birth event
+            this.ui.addLogEntry(`Wezen #${creature.id} is geboren`, 'birth');
+        }
+
+        // Update UI
+        this.updateUI();
+    }
+
+    /**
+     * Add new creatures to the generation, keeping elite creatures alive
+     * @param {Creature[]} eliteCreatures - Elite creatures to keep alive
+     */
+    addNewCreaturesToGeneration(eliteCreatures) {
+        // Update DNA references for elite creatures to match new generation DNA
+        const population = this.evolution.getPopulation();
+        const eliteDNA = population.slice(0, eliteCreatures.length);
+        
+        // Update elite creatures' DNA references to point to new generation DNA
+        for (let i = 0; i < eliteCreatures.length && i < eliteDNA.length; i++) {
+            eliteCreatures[i].dna = eliteDNA[i];
+        }
+
+        // Clear and reset power-ups
+        for (const p of this.powerUps) p.destroy();
+        this.powerUps = [];
+        this.spawnInitialPowerUps();
+
+        // Regenerate obstacles
+        this.physics.createObstacles(5 + Math.floor(Math.random() * 5));
+
+        // Spawn only NEW creatures (skip elite count)
+        const rect = this.canvas.getBoundingClientRect();
+        const displayWidth = rect.width;
+        const displayHeight = rect.height;
+        const margin = 150;
+        const areaWidth = displayWidth - margin * 2;
+        const areaHeight = displayHeight - margin * 2;
+
+        // Start from eliteCount to skip elite DNA (they're already on screen)
+        for (let i = eliteCreatures.length; i < population.length; i++) {
+            const dna = population[i];
+
+            // Random spawn position within arena
+            const x = margin + Math.random() * areaWidth;
+            const y = margin + Math.random() * areaHeight;
+
+            const creature = new Creature(
+                dna,
+                this.physics.getWorld(),
+                x, y,
+                this.nextCreatureId++
+            );
+
+            this.physics.registerCreature(creature);
+            this.creatures.push(creature);
+            
+            // Log birth event
+            this.ui.addLogEntry(`Wezen #${creature.id} is geboren`, 'birth');
         }
 
         // Update UI
@@ -328,11 +395,16 @@ class Simulation {
         const deltaTime = timestamp - this.lastFrameTime;
         this.lastFrameTime = timestamp;
 
+        // Cap delta time to prevent issues when tab becomes active again
+        // Max 100ms per frame (equivalent to 10fps minimum)
+        // This allows simulation to continue in background safely
+        const cappedDeltaTime = Math.min(deltaTime, 100);
+
         // Apply speed multiplier using sub-stepping for stability
         // We cap the delta per physics step to ~16ms to prevent tunneling
         // but run multiple steps if the speed multiplier is high.
         const baseDelta = 16.666; // Standard 60fps frame time
-        const totalSimTime = deltaTime * this.speedMultiplier;
+        const totalSimTime = cappedDeltaTime * this.speedMultiplier;
         const numSubSteps = Math.ceil(this.speedMultiplier);
         const subStepDelta = totalSimTime / numSubSteps;
 
@@ -398,6 +470,9 @@ class Simulation {
             this.totalTime += subStepDelta / 1000;
         }
 
+        // Check for reproduction during generation (once per frame, not per sub-step)
+        this.checkReproduction();
+
         // Automatic generation cycle - trigger when only 2 creatures remain
         const livingCount = this.creatures.filter(c => c.isAlive()).length;
         if (livingCount <= 2 || this.allDead()) {
@@ -428,11 +503,36 @@ class Simulation {
         // Calculate fitness for all creatures
         this.evolution.updateFitness(this.creatures);
 
-        // Evolve next generation
-        this.evolution.evolveNextGeneration();
+        // Get elite creatures (top 2) that will survive to next generation
+        const sorted = [...this.creatures]
+            .filter(c => c.isAlive())
+            .sort((a, b) => (b.dna.fitness || 0) - (a.dna.fitness || 0));
+        const eliteCreatures = sorted.slice(0, Math.min(2, sorted.length));
 
-        // Initialize new generation
-        this.initGeneration();
+        // Remove dead creatures from the array (but keep elite alive ones)
+        for (let i = this.creatures.length - 1; i >= 0; i--) {
+            const creature = this.creatures[i];
+            if (!creature.isAlive() || !eliteCreatures.includes(creature)) {
+                // Remove dead creatures and non-elite creatures
+                if (creature.canDestroy || !eliteCreatures.includes(creature)) {
+                    try {
+                        this.physics.unregisterCreature(creature);
+                        creature.destroy();
+                        this.creatures.splice(i, 1);
+                    } catch (error) {
+                        console.warn('Error removing creature:', error);
+                        this.creatures.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        // Evolve next generation (pass creatures so age can be looked up if needed)
+        // This will create new DNA for the population, but we'll keep elite creatures
+        this.evolution.evolveNextGeneration(this.creatures, eliteCreatures);
+
+        // Add new creatures to the existing elite creatures
+        this.addNewCreaturesToGeneration(eliteCreatures);
     }
 
     /**
@@ -545,6 +645,109 @@ class Simulation {
     /**
      * Update UI stats
      */
+    /**
+     * Check for reproduction between creatures during generation
+     */
+    checkReproduction() {
+        const REPRODUCTION_DISTANCE = 80; // Distance for reproduction
+        const MIN_AGE_FOR_REPRODUCTION = 30; // Minimum age in seconds
+        const MIN_FOOD_FOR_REPRODUCTION = 50; // Minimum food level
+        const MIN_HEALTH_FOR_REPRODUCTION = 50; // Minimum health level
+        const REPRODUCTION_COOLDOWN = 60; // Cooldown in seconds between reproductions
+        const MAX_POPULATION = 100; // Maximum population size
+
+        const aliveCreatures = this.creatures.filter(c => c.isAlive());
+        
+        // Don't reproduce if population is too large
+        if (aliveCreatures.length >= MAX_POPULATION) {
+            return;
+        }
+
+        // Check all pairs of creatures
+        for (let i = 0; i < aliveCreatures.length; i++) {
+            const creature1 = aliveCreatures[i];
+            
+            // Check if creature1 can reproduce
+            if (creature1.age < MIN_AGE_FOR_REPRODUCTION) continue;
+            if (creature1.food < MIN_FOOD_FOR_REPRODUCTION) continue;
+            if (creature1.health < MIN_HEALTH_FOR_REPRODUCTION) continue;
+            if (this.totalTime - creature1.lastReproductionTime < REPRODUCTION_COOLDOWN) continue;
+
+            for (let j = i + 1; j < aliveCreatures.length; j++) {
+                const creature2 = aliveCreatures[j];
+                
+                // Check if creature2 can reproduce
+                if (creature2.age < MIN_AGE_FOR_REPRODUCTION) continue;
+                if (creature2.food < MIN_FOOD_FOR_REPRODUCTION) continue;
+                if (creature2.health < MIN_HEALTH_FOR_REPRODUCTION) continue;
+                if (this.totalTime - creature2.lastReproductionTime < REPRODUCTION_COOLDOWN) continue;
+
+                // Check distance between creatures
+                const pos1 = creature1.getCenterPosition();
+                const pos2 = creature2.getCenterPosition();
+                const dx = pos2.x - pos1.x;
+                const dy = pos2.y - pos1.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < REPRODUCTION_DISTANCE) {
+                    // Reproduce!
+                    this.reproduce(creature1, creature2);
+                    
+                    // Update reproduction times
+                    creature1.lastReproductionTime = this.totalTime;
+                    creature2.lastReproductionTime = this.totalTime;
+                    
+                    // Only one reproduction per creature per check
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * Create a new creature from two parents
+     * @param {Creature} parent1 - First parent
+     * @param {Creature} parent2 - Second parent
+     */
+    reproduce(parent1, parent2) {
+        // Create child DNA through crossover
+        let childDNA = crossoverDNA(parent1.dna, parent2.dna);
+        
+        // Apply some mutation
+        childDNA = mutateDNA(childDNA, 0.1); // 10% mutation rate
+        
+        // Set generation to current
+        childDNA.generation = this.evolution.getGeneration();
+        childDNA.fitness = 0;
+
+        // Spawn position between parents
+        const pos1 = parent1.getCenterPosition();
+        const pos2 = parent2.getCenterPosition();
+        const spawnX = (pos1.x + pos2.x) / 2 + (Math.random() - 0.5) * 40;
+        const spawnY = (pos1.y + pos2.y) / 2 + (Math.random() - 0.5) * 40;
+
+        // Ensure spawn is within bounds
+        const rect = this.canvas.getBoundingClientRect();
+        const margin = 50;
+        const clampedX = Math.max(margin, Math.min(rect.width - margin, spawnX));
+        const clampedY = Math.max(margin, Math.min(rect.height - margin, spawnY));
+
+        // Create new creature
+        const child = new Creature(
+            childDNA,
+            this.physics.getWorld(),
+            clampedX,
+            clampedY,
+            this.nextCreatureId++
+        );
+
+        this.physics.registerCreature(child);
+        this.creatures.push(child);
+
+        // Log birth event
+        this.ui.addLogEntry(`Wezen #${child.id} is geboren (ouders: #${parent1.id} & #${parent2.id})`, 'birth');
+    }
+
     /**
      * Get the ID of the oldest living creature
      * @returns {number|null} ID of oldest creature or null

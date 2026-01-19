@@ -326,7 +326,7 @@ export class UIManager {
     /**
      * Add an entry to the event log
      * @param {string} message - Log message
-     * @param {string} type - Log type ('starvation', 'kill', 'damage', 'death')
+     * @param {string} type - Log type ('starvation', 'kill', 'damage', 'death', 'birth')
      */
     addLogEntry(message, type = 'info') {
         if (!this.logContent) return;
