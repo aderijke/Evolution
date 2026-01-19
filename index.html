@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="nl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evoluerende Wezens Simulatie</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="ui-overlay">
+                <div class="stats-panel">
+                    <h2>Evolutie Simulatie</h2>
+                    <div class="stat-row">
+                        <span class="stat-label">Generatie:</span>
+                        <span id="generation" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Tijd:</span>
+                        <span id="time" class="stat-value">0.0s</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Wezens:</span>
+                        <span id="alive-count" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Beste Fitness:</span>
+                        <span id="best-fitness" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Gem. Fitness:</span>
+                        <span id="avg-fitness" class="stat-value">0</span>
+                    </div>
+                    <div class="stat-row">
+                        <span class="stat-label">Oudste Wezen:</span>
+                        <span id="oldest-creature" class="stat-value">-</span>
+                    </div>
+                </div>
+
+                <div class="controls-panel">
+                    <button id="btn-start" class="control-btn primary">Start</button>
+                    <button id="btn-pause" class="control-btn" disabled>Pauze</button>
+                    <button id="btn-reset">Reset</button>
+                </div>
+                <div class="control-group">
+                    <button id="btn-export" title="Exporteer beste DNA">Exporteer Beste</button>
+                    <button id="btn-import-trigger" title="Importeer DNA uit bestand">Importeer DNA</button>
+                    <input type="file" id="dna-import" style="display: none;" accept=".json">
+                </div>
+                <div class="slider-group">
+                    <label for="speed-slider">Snelheid: <span id="speed-value">1x</span></label>
+                    <input type="range" id="speed-slider" min="0.5" max="1000" step="1" value="1">
+                </div>
+
+                <div class="slider-group">
+                    <label for="pop-slider">Populatie: <span id="pop-value">20</span></label>
+                    <input type="range" id="pop-slider" min="5" max="50" step="5" value="20">
+                </div>
+
+                <div id="info-panel" class="info-panel" style="display: none;">
+                    <div class="panel-header">
+                        <h3>Wezen Details</h3>
+                        <button id="btn-close-info">×</button>
+                    </div>
+                    <div class="info-content">
+                        <div class="stat-row">
+                            <span class="stat-label">Voedsel:</span>
+                            <div class="energy-bar-bg">
+                                <div id="info-food-bar" class="energy-bar" style="background-color: #ff8800;"></div>
+                            </div>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Gezondheid:</span>
+                            <div class="energy-bar-bg">
+                                <div id="info-health-bar" class="energy-bar" style="background-color: #00ff00;"></div>
+                            </div>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Leeftijd:</span>
+                            <span id="info-age" class="stat-value">0.0s</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Lichaamsdelen:</span>
+                            <span id="info-segments" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Sensoren:</span>
+                            <span id="info-sensors" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Ledematen:</span>
+                            <span id="info-limbs" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Sensor-bereik:</span>
+                            <span id="info-sensor-range" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Grijpers:</span>
+                            <span id="info-grippers" class="stat-value">0</span>
+                        </div>
+                        <div class="stat-row">
+                            <span class="stat-label">Geheugen:</span>
+                            <span id="info-memory" class="stat-value">0</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="simulation-canvas"></canvas>
+    </div>
+
+    <!-- Event Log Window (separate draggable window) -->
+    <div id="event-log" class="event-log-window">
+        <div class="window-header" id="log-window-header">
+            <h3>Gebeurtenissen</h3>
+            <div class="window-controls">
+                <button id="btn-minimize-log" class="window-btn" title="Minimaliseren">−</button>
+                <button id="btn-clear-log" class="window-btn" title="Wissen">×</button>
+            </div>
+        </div>
+        <div id="log-content-wrapper" class="log-content-wrapper">
+            <div id="log-content" class="log-content"></div>
+        </div>
+    </div>
+
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.x/dist/pixi.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+
+    <!-- App entry point -->
+    <script type="module" src="js/main.js"></script>
+</body>
+
+</html>
